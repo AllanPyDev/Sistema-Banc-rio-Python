@@ -1,0 +1,73 @@
+# Sistema bancário simples - versão 1
+
+saldo = 0.0
+extrato = []
+LIMITE_SAQUE = 500.0
+MAX_SAQUES = 3
+saques_realizados = 0
+
+def mostrar_menu():
+    print("\n===== BANCO PYTHON =====")
+    print("1 - Depositar")
+    print("2 - Sacar")
+    print("3 - Extrato")
+    print("4 - Sair")
+
+def depositar(valor):
+    global saldo
+    if valor > 0:
+        saldo += valor
+        extrato.append(f"Depósito: R$ {valor:.2f}")
+        print(f"Depósito de R$ {valor:.2f} realizado com sucesso!")
+    else:
+        print("Valor inválido. Digite um valor positivo.")
+
+def sacar(valor):
+    global saldo, saques_realizados
+    if saques_realizados >= MAX_SAQUES:
+        print("Limite diário de saques atingido (3 por dia).")
+    elif valor > LIMITE_SAQUE:
+        print(f"Valor excede o limite de saque por operação (R$ {LIMITE_SAQUE:.2f}).")
+    elif valor > saldo:
+        print("Saldo insuficiente para saque.")
+    elif valor <= 0:
+        print("Valor inválido. Digite um valor positivo.")
+    else:
+        saldo -= valor
+        saques_realizados += 1
+        extrato.append(f"Saque: R$ {valor:.2f}")
+        print(f"Saque de R$ {valor:.2f} realizado com sucesso!")
+
+def mostrar_extrato():
+    print("\n===== EXTRATO =====")
+    if not extrato:
+        print("Nenhuma operação realizada.")
+    else:
+        for item in extrato:
+            print(item)
+    print(f"Saldo atual: R$ {saldo:.2f}")
+
+# Loop principal
+while True:
+    mostrar_menu()
+    opcao = input("Escolha uma opção: ")
+
+    if opcao == "1":
+        try:
+            valor = float(input("Digite o valor para depósito: R$ "))
+            depositar(valor)
+        except ValueError:
+            print("Entrada inválida. Digite um número válido.")
+    elif opcao == "2":
+        try:
+            valor = float(input("Digite o valor para saque: R$ "))
+            sacar(valor)
+        except ValueError:
+            print("Entrada inválida. Digite um número válido.")
+    elif opcao == "3":
+        mostrar_extrato()
+    elif opcao == "4":
+        print("Obrigado por usar o Banco Python!")
+        break
+    else:
+        print("Opção inválida. Tente novamente.")

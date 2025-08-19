@@ -1,142 +1,376 @@
-# ====== SISTEMA BANCÁRIO SIMPLES - VERSÃO 2 ======
+# ====== SISTEMA BANCÁRIO POO ======
+# Este arquivo foi ajustado para funcionar em ambientes sem suporte a input(),
+# mantendo um modo CLI opcional quando o terminal for interativo.
 
-# Constantes
-LIMITE_SAQUE = 500.0
-MAX_SAQUES = 3
-AGENCIA_PADRAO = "0001"
+from _future_ import annotations
+from abc import ABC, abstractmethod
+from datetime import datetime
+from typing import List, Optional, Tuple
+import sys
 
-# Estruturas de dados
-usuarios = []
-contas = []
-saldo = 0.0
-extrato = []
-saques_realizados = 0
+# ---------------- CLASSES DE TRANSACÃO ---------------- #
+class Transacao(ABC):
+    @abstractmethod
+    def registrar(self, conta: "Conta") -> None:  # pragma: no cover - interface
+        ...
 
-# ---------------- Funções principais ---------------- #
+class Deposito(Transacao):
+    def _init_(self, valor: float) -> None:
+        self.valor = valor
 
-def mostrar_menu():
-    print("\n===== BANCO PYTHON v2 =====")
-    print("1 - Depositar")
-    print("2 - Sacar")
-    print("3 - Extrato")
-    print("4 - Criar Usuário")
-    print("5 - Criar Conta Corrente")
-    print("6 - Listar Contas")
-    print("7 - Sair")
+    def registrar(self, conta: "Conta") -> None:
+        if conta.depositar(self.valor):
+            conta.historico.adicionar_transacao(self)
 
-def depositar(valor):
-    global saldo
-    if valor > 0:
-        saldo += valor
-        extrato.append(f"Depósito: R$ {valor:.2f}")
-        print(f"Depósito de R$ {valor:.2f} realizado com sucesso!")
-    else:
-        print("Valor inválido. Digite um valor positivo.")
+class Saque(Transacao):
+    def _init_(self, valor: float) -> None:
+        self.valor = valor
 
-def sacar(valor):
-    global saldo, saques_realizados
-    if saques_realizados >= MAX_SAQUES:
-        print("Limite diário de saques atingido (3 por dia).")
-    elif valor > LIMITE_SAQUE:
-        print(f"Valor excede o limite de saque por operação (R$ {LIMITE_SAQUE:.2f}).")
-    elif valor > saldo:
-        print("Saldo insuficiente para saque.")
-    elif valor <= 0:
-        print("Valor inválido. Digite um valor positivo.")
-    else:
-        saldo -= valor
-        saques_realizados += 1
-        extrato.append(f"Saque: R$ {valor:.2f}")
-        print(f"Saque de R$ {valor:.2f} realizado com sucesso!")
+    def registrar(self, conta: "Conta") -> None:
+        if conta.sacar(self.valor):
+            conta.historico.adicionar_transacao(self)
 
-def mostrar_extrato():
-    print("\n===== EXTRATO =====")
-    if not extrato:
-        print("Nenhuma operação realizada.")
-    else:
-        for item in extrato:
-            print(item)
+# ---------------- CLASSES DE HISTÓRICO ---------------- #
+class Historico:
+    def _init_(self) -> None:
+        self.transacoes: List[str] = []
+
+    def adicionar_transacao(self, transacao: Transacao) -> None:
+        data = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        tipo = transacao._class.name_
+        valor = getattr(transacao, "valor", 0.0)
+        self.transacoes.append(f"{data} - {tipo}: R$ {valor:.2f}")
+
+    def listar(self) -> List[str]:
+        return list(self.transacoes)
+
+# ---------------- CLASSES DE CONTA ---------------- #
+class Conta:
+    def _init_(self, cliente: "Cliente", numero: int, agencia: str = "0001") -> None:
+        self.saldo: float = 0.0
+        self.numero: int = numero
+        self.agencia: str = agencia
+        self.cliente: Cliente = cliente
+        self.historico: Historico = Historico()
+
+    def saldo_atual(self) -> float:
+        return self.saldo
+
+    def sacar(self, valor: float) -> bool:
+        if valor <= 0:
+            print("Valor inválido!")
+            return False
+        if valor > self.saldo:
+            print("Saldo insuficiente!")
+            return False
+        self.saldo -= valor
+        print(f"Saque de R$ {valor:.2f} realizado!")
+        return True
+
+    def depositar(self, valor: float) -> bool:
+        if valor <= 0:
+            print("Valor inválido!")
+            return False
+        self.saldo += valor
+        print(f"Depósito de R$ {valor:.2f} realizado!")
+        return True
+
+class ContaCorrente(Conta):
+    def _init_(
+        self,
+        cliente: "Cliente",
+        numero: int,
+        limite: float = 500.0,
+        limite_saques: int = 3,
+    ) -> None:
+        super()._init_(cliente, numero)
+        self.limite = float(limite)
+        self.limite_saques = int(limite_saques)
+        self.saques_realizados = 0
+
+    def sacar(self, valor: float) -> bool:
+        if self.saques_realizados >= self.limite_saques:
+            print("Limite de saques atingido!")
+            return False
+        if valor > self.limite:
+            print(f"Valor excede o limite de R$ {self.limite:.2f}!")
+            return False
+        if super().sacar(valor):
+            self.saques_realizados += 1
+            return True
+        return False
+
+# ---------------- CLASSES DE CLIENTE ---------------- #
+class Cliente:
+    def _init_(self, endereco: str) -> None:
+        self.endereco = endereco
+        self.contas: List[Conta] = []
+
+    def realizar_transacao(self, conta: Conta, transacao: Transacao) -> None:
+        transacao.registrar(conta)
+
+    def adicionar_conta(self, conta: Conta) -> None:
+        self.contas.append(conta)
+
+class PessoaFisica(Cliente):
+    def _init_(self, nome: str, cpf: str, data_nascimento: str, endereco: str) -> None:
+        super()._init_(endereco)
+        self.nome = nome
+        self.cpf = cpf
+        self.data_nascimento = data_nascimento
+
+# ----------------- ORQUESTRADOR (SEM input()) ----------------- #
+class BancoApp:
+    """Orquestra operações usando as classes do modelo (sem input obrigatório)."""
+
+    def _init_(self) -> None:
+        self.clientes: List[PessoaFisica] = []
+        self.contas: List[ContaCorrente] = []
+
+    # ---- CRUD Cliente/Conta ---- #
+    def criar_usuario(self, nome: str, cpf: str, data_nasc: str, endereco: str) -> PessoaFisica:
+        if any(c.cpf == cpf for c in self.clientes):
+            raise ValueError("Usuário já existe com esse CPF")
+        cliente = PessoaFisica(nome, cpf, data_nasc, endereco)
+        self.clientes.append(cliente)
+        return cliente
+
+    def criar_conta_corrente(
+        self, cpf: str, *, limite: float = 500.0, limite_saques: int = 3
+    ) -> ContaCorrente:
+        cliente = self._buscar_cliente(cpf)
+        if not cliente:
+            raise LookupError("Usuário não encontrado")
+        numero_conta = len(self.contas) + 1
+        conta = ContaCorrente(cliente, numero_conta, limite=limite, limite_saques=limite_saques)
+        self.contas.append(conta)
+        cliente.adicionar_conta(conta)
+        return conta
+
+    # ---- Operações ---- #
+    def depositar(self, cpf: str, valor: float, numero_conta: Optional[int] = None) -> bool:
+        conta = self._selecionar_conta(cpf, numero_conta)
+        if not conta:
+            raise LookupError("Conta não encontrada para este usuário")
+        transacao = Deposito(valor)
+        conta.cliente.realizar_transacao(conta, transacao)
+        return valor > 0
+
+    def sacar(self, cpf: str, valor: float, numero_conta: Optional[int] = None) -> bool:
+        conta = self._selecionar_conta(cpf, numero_conta)
+        if not conta:
+            raise LookupError("Conta não encontrada para este usuário")
+        saldo_antes = conta.saldo
+        transacao = Saque(valor)
+        conta.cliente.realizar_transacao(conta, transacao)
+        return conta.saldo < saldo_antes  # True se sacou
+
+    def extrato(self, cpf: str, numero_conta: Optional[int] = None) -> Tuple[List[str], float]:
+        conta = self._selecionar_conta(cpf, numero_conta)
+        if not conta:
+            raise LookupError("Conta não encontrada para este usuário")
+        return (conta.historico.listar(), conta.saldo_atual())
+
+    def listar_contas(self) -> List[str]:
+        linhas = []
+        for conta in self.contas:
+            linhas.append(
+                f"Agência: {conta.agencia} | Conta: {conta.numero} | Titular: {conta.cliente.nome}"
+            )
+        return linhas
+
+    # ---- Utilitários ---- #
+    def _buscar_cliente(self, cpf: str) -> Optional[PessoaFisica]:
+        return next((c for c in self.clientes if c.cpf == cpf), None)
+
+    def _selecionar_conta(self, cpf: str, numero_conta: Optional[int]) -> Optional[ContaCorrente]:
+        cliente = self._buscar_cliente(cpf)
+        if not cliente or not cliente.contas:
+            return None
+        if numero_conta is None:
+            return cliente.contas[0]  # padrão: primeira conta
+        return next((ct for ct in cliente.contas if ct.numero == numero_conta), None)
+
+# ---------------- MODO CLI (opcional, somente se terminal é interativo) ---------------- #
+def _stdin_interativo() -> bool:
+    try:
+        return sys.stdin.isatty()
+    except Exception:
+        return False
+
+MENU = (
+    "\n===== BANCO PYTHON POO =====\n"
+    "1 - Criar Usuário\n"
+    "2 - Criar Conta Corrente\n"
+    "3 - Depositar\n"
+    "4 - Sacar\n"
+    "5 - Extrato\n"
+    "6 - Listar Contas\n"
+    "7 - Sair\n"
+)
+
+def rodar_cli(app: BancoApp) -> None:
+    while True:
+        print(MENU)
+        try:
+            opcao = input("Escolha uma opção: ")
+        except (EOFError, OSError):
+            print("\nEntrada não disponível. Saindo do modo CLI.")
+            break
+
+        if opcao == "1":
+            nome = input("Nome: ")
+            cpf = input("CPF: ")
+            data_nasc = input("Data de nascimento (dd-mm-aaaa): ")
+            endereco = input("Endereço: ")
+            try:
+                app.criar_usuario(nome, cpf, data_nasc, endereco)
+                print("Usuário criado com sucesso!")
+            except ValueError as e:
+                print(str(e))
+
+        elif opcao == "2":
+            cpf = input("CPF do usuário: ")
+            try:
+                conta = app.criar_conta_corrente(cpf)
+                print(f"Conta criada! Agência: {conta.agencia} Conta: {conta.numero}")
+            except LookupError as e:
+                print(str(e))
+
+        elif opcao == "3":
+            cpf = input("CPF do titular: ")
+            valor = float(input("Valor do depósito: "))
+            try:
+                app.depositar(cpf, valor)
+            except LookupError as e:
+                print(str(e))
+
+        elif opcao == "4":
+            cpf = input("CPF do titular: ")
+            valor = float(input("Valor do saque: "))
+            try:
+                app.sacar(cpf, valor)
+            except LookupError as e:
+                print(str(e))
+
+        elif opcao == "5":
+            cpf = input("CPF do titular: ")
+            try:
+                hist, saldo = app.extrato(cpf)
+                print("\n===== EXTRATO =====")
+                if hist:
+                    for linha in hist:
+                        print(linha)
+                else:
+                    print("Nenhuma operação realizada.")
+                print(f"Saldo atual: R$ {saldo:.2f}")
+            except LookupError as e:
+                print(str(e))
+
+        elif opcao == "6":
+            for linha in app.listar_contas():
+                print(linha)
+
+        elif opcao == "7":
+            print("Saindo...")
+            break
+        else:
+            print("Opção inválida!")
+
+# ---------------- DEMO SCRIPT (para ambientes sem input) ---------------- #
+def demo_script() -> None:
+    app = BancoApp()
+    print("\n** Executando script de demonstração (sem input) **")
+
+    # Cadastro e abertura de conta
+    app.criar_usuario("Ana Silva", "11122233344", "01-01-1990", "Rua A, 100 - Centro - SP/SP")
+    conta_ana = app.criar_conta_corrente("11122233344")
+
+    # Movimentações
+    app.depositar("11122233344", 1000.0)
+    app.sacar("11122233344", 150.0)
+    app.sacar("11122233344", 200.0)
+
+    # Extrato
+    hist, saldo = app.extrato("11122233344")
+    print("===== EXTRATO ANA SILVA =====")
+    for l in hist:
+        print(l)
     print(f"Saldo atual: R$ {saldo:.2f}")
 
-# ---------------- Funções de Usuário e Conta ---------------- #
+    # Segunda pessoa com duas contas
+    app.criar_usuario("Bruno Souza", "55566677788", "02-02-1988", "Av. B, 200 - Bairro - RJ/RJ")
+    c1 = app.criar_conta_corrente("55566677788")
+    c2 = app.criar_conta_corrente("55566677788")
 
-def criar_usuario():
-    cpf = input("Digite o CPF (somente números): ")
-    usuario = filtrar_usuario(cpf)
+    app.depositar("55566677788", 500.0, numero_conta=c2.numero)
+    app.sacar("55566677788", 50.0, numero_conta=c2.numero)
 
-    if usuario:
-        print("Já existe usuário com esse CPF!")
-        return
-
-    nome = input("Digite o nome completo: ")
-    data_nascimento = input("Digite a data de nascimento (dd-mm-aaaa): ")
-    endereco = input("Digite o endereço (logradouro, nro - bairro - cidade/sigla estado): ")
-
-    usuarios.append({
-        "nome": nome,
-        "data_nascimento": data_nascimento,
-        "cpf": cpf,
-        "endereco": endereco
-    })
-
-    print("Usuário criado com sucesso!")
-
-def filtrar_usuario(cpf):
-    usuarios_filtrados = [usuario for usuario in usuarios if usuario["cpf"] == cpf]
-    return usuarios_filtrados[0] if usuarios_filtrados else None
-
-def criar_conta_corrente():
-    cpf = input("Digite o CPF do usuário: ")
-    usuario = filtrar_usuario(cpf)
-
-    if usuario:
-        numero_conta = len(contas) + 1
-        conta = {"agencia": AGENCIA_PADRAO, "numero_conta": numero_conta, "usuario": usuario}
-        contas.append(conta)
-        print(f"Conta criada com sucesso! Agência: {AGENCIA_PADRAO} Conta: {numero_conta}")
-    else:
-        print("Usuário não encontrado. Crie o usuário antes de criar a conta.")
-
-def listar_contas():
-    for conta in contas:
-        linha = f"Agência: {conta['agencia']} | Conta: {conta['numero_conta']} | Titular: {conta['usuario']['nome']}"
+    print("===== CONTAS CADASTRADAS =====")
+    for linha in app.listar_contas():
         print(linha)
 
-# ---------------- Loop principal ---------------- #
+# ---------------- TESTES ---------------- #
+import unittest
 
-while True:
-    mostrar_menu()
-    opcao = input("Escolha uma opção: ")
+class TestBancoApp(unittest.TestCase):
+    def setUp(self) -> None:
+        self.app = BancoApp()
+        self.cliente = self.app.criar_usuario("Teste User", "00011122233", "10-10-1990", "Rua Teste, 1 - Bairro - Cidade/UF")
+        self.conta = self.app.criar_conta_corrente("00011122233", limite=500.0, limite_saques=3)
 
-    if opcao == "1":
-        try:
-            valor = float(input("Digite o valor para depósito: R$ "))
-            depositar(valor)
-        except ValueError:
-            print("Entrada inválida. Digite um número válido.")
+    def test_deposito_valido(self):
+        self.assertTrue(self.app.depositar("00011122233", 100.0))
+        _, saldo = self.app.extrato("00011122233")
+        self.assertEqual(saldo, 100.0)
 
-    elif opcao == "2":
-        try:
-            valor = float(input("Digite o valor para saque: R$ "))
-            sacar(valor)
-        except ValueError:
-            print("Entrada inválida. Digite um número válido.")
+    def test_deposito_invalido(self):
+        self.assertFalse(self.app.depositar("00011122233", -50.0))
+        _, saldo = self.app.extrato("00011122233")
+        self.assertEqual(saldo, 0.0)
 
-    elif opcao == "3":
-        mostrar_extrato()
+    def test_saque_insuficiente(self):
+        self.app.depositar("00011122233", 100.0)
+        self.assertFalse(self.app.sacar("00011122233", 200.0))
+        _, saldo = self.app.extrato("00011122233")
+        self.assertEqual(saldo, 100.0)
 
-    elif opcao == "4":
-        criar_usuario()
+    def test_limite_de_saques(self):
+        self.app.depositar("00011122233", 1000.0)
+        self.assertTrue(self.app.sacar("00011122233", 10.0))
+        self.assertTrue(self.app.sacar("00011122233", 10.0))
+        self.assertTrue(self.app.sacar("00011122233", 10.0))
+        # quarto saque deve falhar
+        self.assertFalse(self.app.sacar("00011122233", 10.0))
+        hist, _ = self.app.extrato("00011122233")
+        # 1 depósito + 3 saques registrados
+        self.assertEqual(sum(1 for l in hist if "Deposito" in l or "Depósito" in l), 1)
+        self.assertEqual(sum(1 for l in hist if "Saque" in l), 3)
 
-    elif opcao == "5":
-        criar_conta_corrente()
+    def test_listar_contas(self):
+        linhas = self.app.listar_contas()
+        self.assertEqual(len(linhas), 1)
+        self.assertIn("Teste User", linhas[0])
 
-    elif opcao == "6":
-        listar_contas()
+    def test_multiplas_contas_escolha_por_numero(self):
+        c2 = self.app.criar_conta_corrente("00011122233")
+        self.app.depositar("00011122233", 300.0, numero_conta=c2.numero)
+        _, saldo_c2 = self.app.extrato("00011122233", numero_conta=c2.numero)
+        self.assertEqual(saldo_c2, 300.0)
+        _, saldo_c1 = self.app.extrato("00011122233", numero_conta=self.conta.numero)
+        self.assertEqual(saldo_c1, 0.0)
 
-    elif opcao == "7":
-        print("Obrigado por usar o Banco Python!")
-        break
+    def test_usuario_duplicado(self):
+        with self.assertRaises(ValueError):
+            self.app.criar_usuario("Outro Nome", "00011122233", "01-01-2000", "Endereço")
 
+# ---------------- PONTO DE ENTRADA ---------------- #
+if _name_ == "_main_":
+    # Se o stdin for interativo, roda o CLI. Caso contrário, roda testes e uma demo.
+    if _stdin_interativo():
+        rodar_cli(BancoApp())
     else:
-        print("Opção inválida. Tente novamente.")
+        print("Ambiente não interativo detectado. Executando testes automatizados e demo...")
+        suite = unittest.defaultTestLoader.loadTestsFromTestCase(TestBancoApp)
+        unittest.TextTestRunner(verbosity=2).run(suite)
+        demo_script()

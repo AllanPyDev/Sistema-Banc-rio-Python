@@ -1,17 +1,28 @@
-# Sistema bancário simples - versão 1
+# ====== SISTEMA BANCÁRIO SIMPLES - VERSÃO 2 ======
 
-saldo = 0.0
-extrato = []
+# Constantes
 LIMITE_SAQUE = 500.0
 MAX_SAQUES = 3
+AGENCIA_PADRAO = "0001"
+
+# Estruturas de dados
+usuarios = []
+contas = []
+saldo = 0.0
+extrato = []
 saques_realizados = 0
 
+# ---------------- Funções principais ---------------- #
+
 def mostrar_menu():
-    print("\n===== BANCO PYTHON =====")
+    print("\n===== BANCO PYTHON v2 =====")
     print("1 - Depositar")
     print("2 - Sacar")
     print("3 - Extrato")
-    print("4 - Sair")
+    print("4 - Criar Usuário")
+    print("5 - Criar Conta Corrente")
+    print("6 - Listar Contas")
+    print("7 - Sair")
 
 def depositar(valor):
     global saldo
@@ -47,7 +58,52 @@ def mostrar_extrato():
             print(item)
     print(f"Saldo atual: R$ {saldo:.2f}")
 
-# Loop principal
+# ---------------- Funções de Usuário e Conta ---------------- #
+
+def criar_usuario():
+    cpf = input("Digite o CPF (somente números): ")
+    usuario = filtrar_usuario(cpf)
+
+    if usuario:
+        print("Já existe usuário com esse CPF!")
+        return
+
+    nome = input("Digite o nome completo: ")
+    data_nascimento = input("Digite a data de nascimento (dd-mm-aaaa): ")
+    endereco = input("Digite o endereço (logradouro, nro - bairro - cidade/sigla estado): ")
+
+    usuarios.append({
+        "nome": nome,
+        "data_nascimento": data_nascimento,
+        "cpf": cpf,
+        "endereco": endereco
+    })
+
+    print("Usuário criado com sucesso!")
+
+def filtrar_usuario(cpf):
+    usuarios_filtrados = [usuario for usuario in usuarios if usuario["cpf"] == cpf]
+    return usuarios_filtrados[0] if usuarios_filtrados else None
+
+def criar_conta_corrente():
+    cpf = input("Digite o CPF do usuário: ")
+    usuario = filtrar_usuario(cpf)
+
+    if usuario:
+        numero_conta = len(contas) + 1
+        conta = {"agencia": AGENCIA_PADRAO, "numero_conta": numero_conta, "usuario": usuario}
+        contas.append(conta)
+        print(f"Conta criada com sucesso! Agência: {AGENCIA_PADRAO} Conta: {numero_conta}")
+    else:
+        print("Usuário não encontrado. Crie o usuário antes de criar a conta.")
+
+def listar_contas():
+    for conta in contas:
+        linha = f"Agência: {conta['agencia']} | Conta: {conta['numero_conta']} | Titular: {conta['usuario']['nome']}"
+        print(linha)
+
+# ---------------- Loop principal ---------------- #
+
 while True:
     mostrar_menu()
     opcao = input("Escolha uma opção: ")
@@ -58,16 +114,29 @@ while True:
             depositar(valor)
         except ValueError:
             print("Entrada inválida. Digite um número válido.")
+
     elif opcao == "2":
         try:
             valor = float(input("Digite o valor para saque: R$ "))
             sacar(valor)
         except ValueError:
             print("Entrada inválida. Digite um número válido.")
+
     elif opcao == "3":
         mostrar_extrato()
+
     elif opcao == "4":
+        criar_usuario()
+
+    elif opcao == "5":
+        criar_conta_corrente()
+
+    elif opcao == "6":
+        listar_contas()
+
+    elif opcao == "7":
         print("Obrigado por usar o Banco Python!")
         break
+
     else:
         print("Opção inválida. Tente novamente.")
